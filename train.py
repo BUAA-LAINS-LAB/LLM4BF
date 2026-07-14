@@ -208,7 +208,6 @@ def get_isac_sft_datasets_numeric_only(tokenizer, data_files):
         return [x for row in mat for x in row]
 
     def fmt(v):
-        # 统一保留 3 位小数
         return f"{float(v): .3f}"
 
     def formatting_prompts_func(examples):
