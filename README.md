@@ -5,7 +5,7 @@ Official repository for our paper:
 
 🎉 Our paper has been accepted by **Science China Information Sciences**!
 
-📄 **Paper:** [DOI: 10.1007/s11432-026-5066-4]([https://www.sciengine.com/SCIS/doi/10.1007/s11432-026-5066-4])
+📄 **Paper:** https://www.sciengine.com/SCIS/doi/10.1007/s11432-026-5066-4
 
 In our work, we provide a general-purpose LLM training framework for the ISAC (Integrated Sensing and Communication) domain. Our training pipeline consists of two main stages: supervised fine-tuning (SFT) and reinforcement learning (RL). The framework is not restricted to any specific ISAC task or wireless communications scenarios. For a given problem, users only need to define the model inputs, outputs, and corresponding prompts, and the framework can be readily applied to train the model.
 
