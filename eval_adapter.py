@@ -357,7 +357,6 @@ def evaluate_best_of_n_all_conditions(args, model, tokenizer, eval_dataset):
                 best_valid_any = max(best_valid_any, cand_valid)
                 continue
 
-            # 维度
             cand_valid += FEAS_WEIGHTS["shape"]
 
             W_stack = vectors_to_W_stack(llm_output, config, K)
@@ -414,7 +413,6 @@ def main(args):
 
     mse_list, valid_list = evaluate_model(args)
 
-    # 总体可行比例
     if mse_list:
         overall_mse = float(np.mean(mse_list))
     else:
