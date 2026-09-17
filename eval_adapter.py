@@ -1,9 +1,9 @@
+from unsloth import FastLanguageModel
 import argparse
-from transformers import AutoTokenizer, pipeline, AutoModelForCausalLM
+from pathlib import Path
 from utils import *
 import random
 import torch
-from unsloth import FastLanguageModel
 from peft import PeftModel
 from tqdm.auto import tqdm
 
@@ -11,7 +11,7 @@ from tqdm.auto import tqdm
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Tester for our optimization LLM')
 
-    # Model and data parameters
+
     parser.add_argument('--max_completion_length', type=int, default=1000, help='Maximum completion length')
     parser.add_argument('--model_method', type=str, default='lora', choices=['lora', 'full'],
                         help='use lora or full LLM for evaluation')
@@ -19,11 +19,11 @@ def parse_args() -> argparse.Namespace:
                         default='./model_cache/unsloth/Qwen2.5-3B-Instruct-unsloth-bnb-4bit', help='Model name')
     parser.add_argument('--seed', type=int, default=3047, help='Random seed')
 
-    # Evaluation method selection
+
     parser.add_argument('--eval_method', type=str, default='vanilla_fast',
                         choices=['vanilla_fast', 'vanilla_conditions', 'best_of_n_fast', 'best_of_n_conditions'])
 
-    # Parameters for both methods
+
     parser.add_argument('--num_samples', type=int, default=30,
                         help='Number of samples to evaluate (default: 100)')
     parser.add_argument('--max_seq_length', type=int, default=3000, help='Maximum sequence length')
@@ -32,28 +32,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--load_in_4bit', action='store_true', default=True,
                         help='Use 4-bit quantization to reduce memory usage')
 
-    # Parameters specific to Best-of-N evaluation
+
     parser.add_argument('--best_of_n', type=int, default=4,
                         help='Number of solutions to generate per prompt (best_of_n only)')
     parser.add_argument('--temperature', type=float, default=0.7, help='Sampling temperature')
     parser.add_argument('--top_p', type=float, default=0.9, help='Nucleus sampling parameter (best_of_n only)')
 
-    # Dataset loading method
+
     parser.add_argument('--dataset_eval_path', type=str, default='dataset/ISAC_Dataset_eval.json',
                         help='the path for evaluation dataset')
 
+    parser.add_argument('--weights_dir', type=Path, default=Path(__file__).resolve().parent.parent / 'LLM4BF-release')
+    parser.add_argument('--model_path', type=str, default=None)
+
     args = parser.parse_args()
+    if args.model_method == 'full' and not args.model_path:
+        parser.error('--model_path is required for --model_method full')
 
     return args
 
 
 config = ISACConfig()
-
-LORA_PATHS = {
-    1: "./history/k1/K1_RL2_Qwen2.5/rl_gens2_data_length5000_batch4_epoch4/checkpoint-800-multi_lora",
-    3: "./history/k3/K3_20w_epoch1_Qwen2.5/RL/K3_RL2_Qwen2.5/rl_gens2_data_length5000_batch4_epoch4/checkpoint-800-multi_lora",
-    5: "./history/k5/RL/K3_RL2_Qwen2.5/rl_gens2_data_length5000_batch4_epoch2/checkpoint-800-multi_lora",
-}
 
 
 def get_adapter_name_for_K(K):
@@ -61,9 +60,6 @@ def get_adapter_name_for_K(K):
 
 
 def set_adapter_for_K(model, K):
-    """
-    Select the appropriate LoRA adapter based on K
-    """
     adapter_name = get_adapter_name_for_K(int(K))
     if isinstance(model, PeftModel):
         model.set_adapter(adapter_name)
@@ -83,8 +79,12 @@ def set_global_seed(seed):
 
 
 def load_model_and_tokenizer(args):
-
     if args.model_method == "lora":
+        lora_paths = {k: args.weights_dir / 'rl' / f'k{k}' for k in (1, 3, 5)}
+        for path in lora_paths.values():
+            for name in ('adapter_config.json', 'adapter_model.safetensors'):
+                if not (path / name).is_file():
+                    raise FileNotFoundError(path / name)
         base_model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=args.base_model,
             max_seq_length=args.max_seq_length,
@@ -93,18 +93,18 @@ def load_model_and_tokenizer(args):
             dtype=args.dtype,
         )
 
-        # Load the first LoRA and build the PeftModel. Here, the first one is used as the default LoRA.
-        first_K = sorted(LORA_PATHS.keys())[0]
-        first_path = LORA_PATHS[first_K]
-        model = PeftModel.from_pretrained(base_model, first_path,
+
+        first_K = sorted(lora_paths.keys())[0]
+        first_path = lora_paths[first_K]
+        model = PeftModel.from_pretrained(base_model, str(first_path),
                                           adapter_name=get_adapter_name_for_K(first_K))
-        # Add the remaining LoRA models as well
-        for K, lora_path in LORA_PATHS.items():
+
+        for K, lora_path in lora_paths.items():
             if K == first_K:
                 continue
-            model.load_adapter(lora_path, adapter_name=get_adapter_name_for_K(K))
+            model.load_adapter(str(lora_path), adapter_name=get_adapter_name_for_K(K))
 
-        # By default, the adapter corresponding to `first_K` is used first.
+
         model.set_adapter(get_adapter_name_for_K(first_K))
     else:
         model, tokenizer = FastLanguageModel.from_pretrained(
@@ -124,9 +124,6 @@ def load_model_and_tokenizer(args):
 
 
 def evaluate_vanilla_fast(args, model, tokenizer, eval_dataset):
-    """
-    Since this is an evaluation across multiple LORA scenarios, the default batch_size is set to 1.
-    """
     subset = selected_eval_dataset(args.num_samples, eval_dataset)
     mse_list = []
     valid_list = []
@@ -134,14 +131,13 @@ def evaluate_vanilla_fast(args, model, tokenizer, eval_dataset):
     model.eval()
 
     for i in tqdm(range(0, len(subset)), desc="Evaluating vanilla"):
-
         sample = subset[i]
         prompt = sample["prompt"]
         input_obj = sample["input"]
         K = int(sample["num_users"])
         CRB_gt = float(sample["objective"])
 
-        # Based on K-switch LoRA
+
         set_adapter_for_K(model, K)
 
         inputs = tokenizer(prompt, return_tensors="pt", padding=False, truncation=True).to(model.device)
@@ -182,7 +178,6 @@ def evaluate_vanilla_all_conditions(args, model, tokenizer, eval_dataset):
     model.eval()
 
     for i in tqdm(range(0, len(subset)), desc="Evaluating vanilla (all conditions)"):
-
         sample = subset[i]
         prompt = sample["prompt"]
         input_obj = sample["input"]
@@ -405,10 +400,9 @@ def evaluate_model(args):
 
 
 def main(args):
-
     set_global_seed(args.seed)
 
-    print(f"Running multi-lord adapter")
+    print(f"Running multi-expert evaluation: {args.eval_method}")
     print(f"Number of samples: {args.num_samples}")
 
     mse_list, valid_list = evaluate_model(args)

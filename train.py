@@ -12,7 +12,7 @@ from utils import *
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Trainer for solving ISAC optimization problem')
 
-    # Model and data parameters
+
     parser.add_argument('--max_seq_length', type=int, default=2048, help='Maximum sequence length')
     parser.add_argument('--dtype', type=str, default='bfloat16', choices=['bfloat16', 'float16'],
                         help='Data type (bfloat16 or float16)')
@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--data_dir', type=str,
                         default='dataset/ISAC_Dataset_Wk_1_SFT.json', help='Dataset path')
 
-    # LoRA hyperparameters
+
     parser.add_argument('--lora_r', type=int, default=16, help='Rank of the LoRA decomposition')
     parser.add_argument('--lora_alpha', type=int, default=16, help='Scaling factor for LoRA updates')
     parser.add_argument('--bias', type=str, default='lora_only', choices=['none', 'all', 'lora_only'],
@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--use_rslora', action='store_true', default=False, help='Use RSLoRA')
     parser.add_argument('--loftq_config', type=str, default=None, help='LoFT-Q configuration')
 
-    # Training configurations
+
     parser.add_argument('--use_gradient_checkpointing', type=str, default='unsloth', help='Use gradient checkpointing')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size per device during training')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
@@ -61,64 +61,43 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-# Initialize the system model parameters for the communication scenario.
 config = ISACConfig()
 
 
 class SafeDataCollatorForCompletionOnlyLM(DataCollatorForLanguageModeling):
-    """
-    Applied during training, this adds a mask to the LLM output so that the model computes the loss only on the answer part:
-    Input format: a fixed prompt template (Instruction + Input + Response + EOS)
-    By finding the position of Response in the token sequence, all tokens before it are set to -100, so their attention
-    weight is reduced to the lowest level.
-    """
-
     def __init__(self, response_template, tokenizer, mlm=False, fallback_strategy="last_portion"):
         super().__init__(tokenizer=tokenizer, mlm=mlm)
-        # Set the response template. The function will look for this template and treat the content after it as the
-        # model's predicted output.
+
+
         self.response_template = response_template
         self.tokenizer = tokenizer
 
-        # transform response template to token sequence
+
         self.response_template_ids = tokenizer.encode(response_template, add_special_tokens=False)
         self.fallback_strategy = fallback_strategy
 
     def torch_call(self, examples):
-        # The parent class method takes a batch of examples, copies the inputs to create labels,
-        # and then pads them to the same length.
-        # In the tokenizer part, the data is processed into a dictionary format,
-        # where input_ids represents the dataset input.
-        # input_ids is a list that represents the tokenized form of the original data, for example:
-        # batch["input_ids"] = [
-        # [101, 200, 300, 999, 500],  # the 0th sample (i=0)
-        # [101, 200, 305, 999, 600]   # the 1st sample (i=1)
-        # ]
-        # super().torch_call copies the inputs once and creates batch["labels"],
-        # which is exactly the same as input_ids and is used for mask labeling.
         batch = super().torch_call(examples)
 
-        # Iterate over each sample in the batch. len(batch["input_ids"]) is the batch size.
+
         for i in range(len(batch["input_ids"])):
-            # Take one sample.
             input_ids = batch["input_ids"][i].tolist()
 
-            # Decode it back into the full string, and then look for the template in the string.
+
             text = self.tokenizer.decode(input_ids, skip_special_tokens=False)
             char_pos = text.find(self.response_template)
 
             if char_pos != -1:
-                # Find the template and take the prefix up to the end of the template.
                 prefix_text = text[: char_pos + len(self.response_template)]
 
-                # Re-encode the prefix to get the prefix token length.
+
                 prefix_ids = self.tokenizer(prefix_text, add_special_tokens=False)["input_ids"]
                 response_start_idx = len(prefix_ids)
 
-                # Mask the labels of the template and all tokens before it.
+
                 batch["labels"][i, :response_start_idx] = -100
                 continue
-            # If the template is not found, use a fallback strategy.
+
             warnings.warn(f"Response template not found in example {i}")
 
             if self.fallback_strategy == "last_portion":
@@ -136,11 +115,6 @@ class SafeDataCollatorForCompletionOnlyLM(DataCollatorForLanguageModeling):
 
 
 def get_isac_sft_datasets(tokenizer, data_files):
-    """
-    Build the dataset for SFT:
-    Convert the data in the JSON file into a fixed format and output it as "text", including:
-    SYSTEM_PROMPT, Instruction, Input (JSON), RESPONSE_TEMPLATE, Output, and EOS.
-    """
     EOS_TOKEN = tokenizer.eos_token
 
     def formatting_prompts_func(examples):
@@ -149,7 +123,7 @@ def get_isac_sft_datasets(tokenizer, data_files):
         outputs = examples["output"]
         user_nums = examples["num_users"]
 
-        # The final prompt given to the model is stored in text.
+
         texts = []
         for instruction, input_text, output_text, user_num in zip(
                 instructions, inputs, outputs, user_nums
@@ -157,11 +131,11 @@ def get_isac_sft_datasets(tokenizer, data_files):
             input_rounded = round_floats(input_text, ndigits=3)
             output_rounded = round_floats(output_text, ndigits=3)
 
-            # Convert it into compact JSON to reduce the token length and make it easier for the LLM to parse.
+
             input_str = json.dumps(input_rounded, ensure_ascii=False, separators=(",", ":"))
             output_str = json.dumps(output_rounded, ensure_ascii=False, separators=(",", ":"))
 
-            # prompt = SYSTEM_PROMPT + user_num + Instruction + Input + RESPONSE_TEMPLATE + Output + EOS
+
             text = (
                     SYSTEM_PROMPT
                     + "\n# Users:\n"
@@ -184,7 +158,7 @@ def get_isac_sft_datasets(tokenizer, data_files):
         formatting_prompts_func,
         batched=True,
         load_from_cache_file=False,
-        remove_columns=[],    # Do not remove any other fields in the JSON data.
+        remove_columns=[],
     )
 
     data_collator = SafeDataCollatorForCompletionOnlyLM(
@@ -198,10 +172,6 @@ def get_isac_sft_datasets(tokenizer, data_files):
 
 
 def get_isac_sft_datasets_numeric_only(tokenizer, data_files):
-    """
-    Build a numeric-only SFT dataset:
-    It no longer includes natural language such as SYSTEM_PROMPT, Instruction, or JSON key names.
-    """
     EOS_TOKEN = tokenizer.eos_token
 
     def flatten_2d(mat):
@@ -211,32 +181,30 @@ def get_isac_sft_datasets_numeric_only(tokenizer, data_files):
         return f"{float(v): .3f}"
 
     def formatting_prompts_func(examples):
-        inputs = examples["input"]          # List[dict]
-        outputs = examples["output"]        # List[List[float]]
-        user_nums = examples["num_users"]   # List[int or float]
+        inputs = examples["input"]
+        outputs = examples["output"]
+        user_nums = examples["num_users"]
 
         texts = []
         for inp, out, K in zip(inputs, outputs, user_nums):
-
             theta = inp["theta"]
             PT = inp["PT"]
             Gamma = inp["Gamma"]
-            H_real = inp["H_real"]   # [K, Nt]
-            H_imag = inp["H_imag"]   # [K, Nt]
+            H_real = inp["H_real"]
+            H_imag = inp["H_imag"]
 
-            # expand to vector： [num_users, theta, PT, Gamma, H_real_flat..., H_imag_flat...]
+
             H_real_flat = flatten_2d(H_real)
             H_imag_flat = flatten_2d(H_imag)
 
             x_vec = [K, theta, PT, Gamma, *H_real_flat, *H_imag_flat]
             y_vec = out
 
-            # transform to string
+
             input_str = " ".join(fmt(v) for v in x_vec)
             output_str = " ".join(fmt(v) for v in y_vec)
 
-            # final text：
-            #    <input> + RESPONSE_TEMPLATE + <output> + EOS
+
             text = input_str + RESPONSE_TEMPLATE + output_str + EOS_TOKEN
             texts.append(text)
 
@@ -292,39 +260,34 @@ def train_model(args):
         dir_out = os.path.join(args.output_dir, run_time, log_format_dir)
         dir_log = os.path.join(args.output_dir, run_time, tensor_dir)
 
-    # LoRA place
+
     target_modules = [
         "q_proj", "k_proj", "v_proj", "o_proj",
         "gate_proj", "up_proj", "down_proj",
     ]
 
-    # output layer
+
     if args.train_lm_head:
         target_modules.append('lm_head')
-    # embedding layer
+
     if args.train_embed_tokens:
         target_modules.append('embed_tokens')
 
-    # LoRA configuration
+
     model = FastLanguageModel.get_peft_model(
         model,
-        r=args.lora_r,  # rank
+        r=args.lora_r,
         target_modules=target_modules,
-        lora_alpha=args.lora_alpha,  # scaling coefficient
+        lora_alpha=args.lora_alpha,
         bias=args.bias,
-        # To conserve memory, discard some of the intermediate results from the forward pass
-        # and recalculate them during the backward pass.
+
+
         use_gradient_checkpointing=args.use_gradient_checkpointing,
         random_state=args.seed,
         use_rslora=args.use_rslora,
         loftq_config=args.loftq_config
     )
 
-    # The SFT training process is as follows:
-    # 1. Call the tokenizer to convert the input data into a batch of text lists, which contain "input_ids".
-    # 2. Call the collator (SafeDataCollatorForCompletionOnlyLM) to pad them to the same length, copy input_ids to labels, and mask the description part as -100 based on the template.
-    # 3. Feed the batch into the model for training, compute the loss, and update the model.
-    # 4. Optional steps: gradient accumulation, learning rate adjustment, checkpoint saving, and so on.
 
     sft_args = SFTConfig(
         output_dir=dir_out,
