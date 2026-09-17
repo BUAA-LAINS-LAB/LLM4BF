@@ -32,7 +32,7 @@ The training pipeline consists of two stages, SFT and RL, which correspond to `t
 
 ## Training
 
-The following steps cover environment setup, SFT, RL, and evaluation. If you only want to evaluate the released weights, complete Step 1 and skip to [Step 4](#4-testing). Run all commands from the repository root.
+The following steps cover environment setup, SFT, RL, and evaluation. If you only want to evaluate the released weights, complete Step 1 and skip to Step 4.
 
 ### 1. Environment Preparation
 
