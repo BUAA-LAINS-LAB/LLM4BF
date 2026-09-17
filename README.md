@@ -78,7 +78,7 @@ Use the corresponding dataset for each scenario. Set `--bias none` when training
   Maximum sequence length. If your task is relatively simple and GPU memory is limited, you can reduce this value accordingly.
 
 * `--local_file`
-  Load the base model from local files. Local loading is enabled by default in the current script; download the base model before training.
+  Load the base model from local files. Local loading is enabled by default in the current script. Download the base model before training.
 
 * `--model_name`
   Name of the base model. If loading from a local file, this should be set to the local path of the model.
@@ -113,7 +113,7 @@ python rl.py \
   --output_dir ./history/k1_rl
 ```
 
-The RL checkpoint contains the updated adapter and can be loaded directly with the base model for evaluation; the SFT adapter does not need to be loaded separately.
+The RL checkpoint contains the updated adapter and can be loaded directly with the base model for evaluation. The SFT adapter does not need to be loaded separately.
 
 #### Key Arguments
 
@@ -135,9 +135,9 @@ The RL checkpoint contains the updated adapter and can be loaded directly with t
 
 ### 4. Testing
 
-You can evaluate the released RL adapters directly without running SFT or RL again. Download the weight archives and extract each adapter into a separate directory. Each directory only needs `adapter_config.json` and `adapter_model.safetensors`; the base model and tokenizer are loaded from the model directory prepared in Step 1.
+You can evaluate the released RL adapters directly without running SFT or RL again. Download the weight archives and extract each adapter into a separate directory. Each directory only needs `adapter_config.json` and `adapter_model.safetensors`. The base model and tokenizer are loaded from the model directory prepared in Step 1.
 
-The examples below use the following layout for the K=1, 3, and 5 scenarios supported by the code. Folder names are examples; if your archives extract into differently named folders, use those paths instead. Match each adapter to its scenario rather than relying on the archive name.
+The examples below use the following layout for the K=1, 3, and 5 scenarios supported by the code. Folder names are examples. If your archives extract into differently named folders, use those paths instead. Match each adapter to its scenario rather than relying on the archive name.
 
 ```text
 weights/
@@ -196,7 +196,7 @@ The available evaluation modes are:
 | `best_of_n_fast` | Multiple candidates per input | Parsing check and selection by computed CRB |
 | `best_of_n_conditions` | Multiple candidates per input | Constraint scoring and selection by computed CRB |
 
-The scripts print `valid_ratio` and `MSE`. In the `conditions` modes, `valid_ratio` is the average weighted constraint score used by the implementation, rather than the fraction of samples satisfying every constraint. Best-of-N selection uses the computed CRB; constraint scores are reported separately. Use the same evaluation mode and generation settings when comparing checkpoints.
+The scripts print `valid_ratio` and `MSE`. In the `conditions` modes, `valid_ratio` is the average weighted constraint score used by the implementation, rather than the fraction of samples satisfying every constraint. Best-of-N selection uses the computed CRB. Constraint scores are reported separately. Use the same evaluation mode and generation settings when comparing checkpoints.
 
 #### Multi-expert evaluation
 
@@ -223,7 +223,7 @@ python eval_adapter.py \
   --max_completion_length 1000
 ```
 
-This example loads all three experts and evaluates the K=1 samples. Change the dataset path to test another scenario, or use a combined JSON dataset containing K=1, 3, and 5 samples to exercise routing within one run. Multi-expert evaluation processes samples sequentially; `eval.py` supports batched evaluation of a single expert.
+This example loads all three experts and evaluates the K=1 samples. Change the dataset path to test another scenario, or use a combined JSON dataset containing K=1, 3, and 5 samples to exercise routing within one run. Multi-expert evaluation processes samples sequentially. The `eval.py` supports batched evaluation of a single expert.
 
 
 ## Data
@@ -237,9 +237,9 @@ Our input data is derived from the analytical solution of the system model prese
 
 ## Open Source
 
-We provide the experimental datasets and trained RL LoRA adapters. The weights are distributed as separate archives, one for each scenario. Extract the adapter you need and follow [Testing](#4-testing); no optimizer states or training logs are required for inference.
+We provide the experimental datasets and trained RL LoRA adapters. The weights are distributed as separate archives, one for each scenario. Extract the adapter you need and follow [Testing](#4-testing).
 
-**Dataset — Baidu Netdisk:** [Download](https://pan.baidu.com/s/1JohdBb1zSS1a0SciDy8MCQ?pwd=d1aq) (access code: `d1aq`).
+Baidu Netdisk: [Download](https://pan.baidu.com/s/1JohdBb1zSS1a0SciDy8MCQ?pwd=d1aq) (access code: `d1aq`).
 
 
 ## Acknowledgments
